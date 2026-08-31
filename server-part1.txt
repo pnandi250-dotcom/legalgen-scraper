@@ -1,0 +1,448 @@
+const express = require('express');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
+const { JSDOM } = require('jsdom');
+
+const app = express();
+const PORT = 3001;
+
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+
+// API Key Authentication
+const API_KEY = 'legalgen-v2-key-2024';
+const auth = (req, res, next) => {
+    const key = req.headers['x-api-key'];
+    if (key !== API_KEY) {
+        return res.status(401).json({ error: 'Invalid API Key' });
+    }
+    next();
+};
+
+// Rate Limiting
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 50
+});
+app.use('/api/', limiter);
+
+// ============================================================
+// BUSINESS TYPE DETECTION ENGINE V3 - ULTRA SMART
+// ============================================================
+
+const BUSINESS_TYPE_RULES = {
+    ecommerce: {
+        name: 'E-Commerce',
+        icon: '??',
+        color: '#FF6B35',
+        description: 'Online store selling products/services',
+        indicators: [
+            { pattern: /add.to.cart|addtocart|buy.now|shop.now|checkout|cart\.item/gi, weight: 10 },
+            { pattern: /price|?|\$|Rs\.|INR|discount|offer|sale|deal/gi, weight: 8 },
+            { pattern: /product|category|collection|shop|store|marketplace/gi, weight: 7 },
+            { pattern: /shipping|delivery|return.?policy|refund|exchange/gi, weight: 9 },
+            { pattern: /payment|pay.?now|cod|card.?payment|upi|wallet/gi, weight: 8 },
+            { pattern: /wishlist|save.for.later|compare|review|rating/gi, weight: 6 },
+            { pattern: /order|tracking|invoice|receipt|purchase/gi, weight: 7 },
+            { pattern: /amazon|flipkart|myntra|ajio|snapdeal|ebay/gi, weight: 5 },
+            { pattern: /cart|basket|bag|mini.?cart/gi, weight: 8 },
+            { pattern: /sku|variant|size.*chart|quantity|stock|inventory/gi, weight: 6 }
+        ],
+        requiredLegalPages: [
+            { page: 'Privacy Policy', priority: 'CRITICAL', reason: 'DPDP Act mandatory for collecting customer data', regulation: 'DPDP Act 2023' },
+            { page: 'Refund Policy', priority: 'CRITICAL', reason: 'Consumer Protection Act 2019 and E-Commerce Rules 2020', regulation: 'CPA 2019' },
+            { page: 'Shipping Policy', priority: 'HIGH', reason: 'E-Commerce Rules 2020 mandate delivery timelines', regulation: 'E-Commerce Rules 2020' },
+            { page: 'Terms of Service', priority: 'CRITICAL', reason: 'IT Act 2000 and Contract Law requirements', regulation: 'IT Act 2000' },
+            { page: 'Cancellation Policy', priority: 'HIGH', reason: 'Consumer right to cancel orders', regulation: 'CPA 2019' },
+            { page: 'Payment Security', priority: 'CRITICAL', reason: 'PCI-DSS and RBI guidelines for payment data', regulation: 'RBI/PCI-DSS' },
+            { page: 'Cookie Policy', priority: 'MEDIUM', reason: 'IT Rules 2021 for tracking technologies', regulation: 'IT Rules 2021' },
+            { page: 'Grievance Officer', priority: 'CRITICAL', reason: 'IT Rules 2021 mandatory for e-commerce', regulation: 'IT Rules 2021' }
+        ],
+        optionalLegalPages: [
+            { page: 'FAQ Page', priority: 'LOW', reason: 'Reduces support queries' },
+            { page: 'About Us', priority: 'LOW', reason: 'Builds trust' },
+            { page: 'Size Guide', priority: 'MEDIUM', reason: 'Reduces returns by 20%' }
+        ],
+        applicableRegulations: ['DPDP Act 2023', 'IT Act 2000', 'CPA 2019', 'E-Commerce Rules 2020', 'IT Rules 2021', 'PCI-DSS', 'RBI Guidelines'],
+        riskFactors: ['Payment Data Processing', 'Customer PII Collection', 'Third-party Logistics', 'Inventory Management'],
+        complianceScoreWeights: { privacy: 25, security: 20, consumer: 25, operations: 15, transparency: 15 }
+    },
+
+    saas: {
+        name: 'SaaS / Tech Platform',
+        icon: '??',
+        color: '#4ECDC4',
+        description: 'Software-as-a-Service or technology platform',
+        indicators: [
+            { pattern: /sign.up|free.trial|get.started|create.account|register/gi, weight: 7 },
+            { pattern: /login|signin|sign.in|log.in|authentication/gi, weight: 6 },
+            { pattern: /pricing|plan|subscription|monthly|annual|billing/gi, weight: 9 },
+            { pattern: /api|documentation|developer|integration|webhook|sdk/gi, weight: 8 },
+            { pattern: /dashboard|analytics|report|metric|insight/gi, weight: 7 },
+            { pattern: /cloud|hosted|deploy|instance|server.less/gi, weight: 6 },
+            { pattern: /feature|module|addon|plugin|extension|integration/gi, weight: 5 },
+            { pattern: /slack|zapier|salesforce|hubspot|integration/gi, weight: 6 },
+            { pattern: /enterprise|team|collaborate|workspace/gi, weight: 5 },
+            { pattern: /changelog|release.note|update|version/gi, weight: 4 }
+        ],
+        requiredLegalPages: [
+            { page: 'Privacy Policy', priority: 'CRITICAL', reason: 'User data processing under DPDP Act', regulation: 'DPDP Act 2023' },
+            { page: 'Terms of Service', priority: 'CRITICAL', reason: 'SaaS contract and IT Act requirements', regulation: 'IT Act 2000' },
+            { page: 'Acceptable Use Policy', priority: 'HIGH', reason: 'Prevent platform abuse', regulation: 'IT Act 2000' },
+            { page: 'SLA / Uptime Policy', priority: 'HIGH', reason: 'Service level commitments', regulation: 'Contract Law' },
+            { page: 'Data Processing Agreement', priority: 'CRITICAL', reason: 'B2B data handling requirements', regulation: 'DPDP Act 2023' },
+            { page: 'Security Practices', priority: 'HIGH', reason: 'Build trust for enterprise clients', regulation: 'ISO 27001' },
+            { page: 'Cookie Policy', priority: 'MEDIUM', reason: 'Analytics and tracking disclosure', regulation: 'IT Rules 2021' },
+            { page: 'Sub-processors List', priority: 'MEDIUM', reason: 'Supply chain transparency', regulation: 'GDPR/DPDP' }
+        ],
+        optionalLegalPages: [
+            { page: 'Status Page', priority: 'MEDIUM', reason: 'Incident transparency' },
+            { page: 'API Terms', priority: 'HIGH', reason: 'Developer usage boundaries' },
+            { page: 'SOC 2 Report', priority: 'MEDIUM', reason: 'Enterprise trust requirement' }
+        ],
+        applicableRegulations: ['DPDP Act 2023', 'IT Act 2000', 'IT Rules 2021', 'Contract Law', 'ISO 27001', 'SOC 2'],
+        riskFactors: ['User Data at Scale', 'API Security', 'Third-party Integrations', 'Data Residency'],
+        complianceScoreWeights: { privacy: 30, security: 30, consumer: 15, operations: 15, transparency: 10 }
+    },
+
+    blog: {
+        name: 'Blog / Content Site',
+        icon: '??',
+        color: '#A8E6CF',
+        description: 'Content publishing or news website',
+        indicators: [
+            { pattern: /article|post|blog|news|story|content/gi, weight: 8 },
+            { pattern: /author|writer|contributor|editorial/gi, weight: 7 },
+            { pattern: /comment|reply|discussion|thread/gi, weight: 6 },
+            { pattern: /category|tag|archive|search/gi, weight: 5 },
+            { pattern: /subscribe|newsletter|follow|rss|feed/gi, weight: 7 },
+            { pattern: /share|social|tweet|facebook|linkedin/gi, weight: 5 },
+            { pattern: /published|updated|read.time|reading/gi, weight: 6 },
+            { pattern: /ads|advertisement|sponsored|affiliate/gi, weight: 6 },
+            { pattern: /medium|wordpress|ghost|substack/gi, weight: 5 },
+            { pattern: /trending|popular|featured|editor.?pick/gi, weight: 4 }
+        ],
+        requiredLegalPages: [
+            { page: 'Privacy Policy', priority: 'CRITICAL', reason: 'Reader analytics and comments collect data', regulation: 'DPDP Act 2023' },
+            { page: 'Disclaimer', priority: 'HIGH', reason: 'Content accuracy and opinion protection', regulation: 'IT Act 2000' },
+            { page: 'Cookie Policy', priority: 'MEDIUM', reason: 'Analytics and advertising cookies', regulation: 'IT Rules 2021' },
+            { page: 'Terms of Use', priority: 'MEDIUM', reason: 'Comment rules and content usage rights', regulation: 'Copyright Law' },
+            { page: 'Affiliate Disclosure', priority: 'HIGH', reason: 'Mandatory if using affiliate links', regulation: 'ASC Guidelines' }
+        ],
+        optionalLegalPages: [
+            { page: 'About Author', priority: 'LOW', reason: 'Personal branding' },
+            { page: 'Guest Post Guidelines', priority: 'LOW', reason: 'If accepting submissions' },
+            { page: 'Corrections Policy', priority: 'MEDIUM', reason: 'Journalistic credibility' }
+        ],
+        applicableRegulations: ['DPDP Act 2023', 'IT Act 2000', 'IT Rules 2021', 'Copyright Law', 'Press Council Guidelines'],
+        riskFactors: ['Comment Data', 'Third-party Analytics', 'Affiliate Links', 'User-Generated Content'],
+        complianceScoreWeights: { privacy: 20, security: 10, consumer: 10, operations: 10, transparency: 50 }
+    },
+
+    finance: {
+        name: 'Finance / Fintech',
+        icon: '??',
+        color: '#FFD93D',
+        description: 'Financial services or fintech platform',
+        indicators: [
+            { pattern: /loan|emi|credit|interest.rate|apr/gi, weight: 10 },
+            { pattern: /invest|mutual.fund|sip|stock|trading|portfolio/gi, weight: 10 },
+            { pattern: /insurance|premium|claim|policy|coverage/gi, weight: 9 },
+            { pattern: /bank|account|balance|transfer|upi|netbanking/gi, weight: 9 },
+            { pattern: /kyc|aadhaar|pan|identity.verification/gi, weight: 8 },
+            { pattern: /risk|return|calculator|planner|advisor/gi, weight: 7 },
+            { pattern: /rbi|sebi|irdai|pfrda|regulated/gi, weight: 8 },
+            { pattern: /gold|fixed.deposit|recurring.deposit|fd|rd/gi, weight: 7 },
+            { pattern: /credit.score|cibil|equifax|experian/gi, weight: 7 },
+            { pattern: /wealth|tax|saving|retirement|pension/gi, weight: 6 }
+        ],
+        requiredLegalPages: [
+            { page: 'Privacy Policy', priority: 'CRITICAL', reason: 'Sensitive financial data under DPDP', regulation: 'DPDP Act 2023' },
+            { page: 'Terms of Service', priority: 'CRITICAL', reason: 'Financial service agreements', regulation: 'RBI Guidelines' },
+            { page: 'Risk Disclosure', priority: 'CRITICAL', reason: 'SEBI mandatory investment warnings', regulation: 'SEBI Regulations' },
+            { page: 'Grievance Redressal', priority: 'CRITICAL', reason: 'RBI Ombudsman requirements', regulation: 'RBI Code' },
+            { page: 'KYC Policy', priority: 'CRITICAL', reason: 'Identity verification procedures', regulation: 'PMLA 2002' },
+            { page: 'Data Security', priority: 'CRITICAL', reason: 'Financial data protection mandates', regulation: 'RBI IT Framework' },
+            { page: 'Insurance Disclaimer', priority: 'HIGH', reason: 'IRDAI disclosure norms', regulation: 'IRDAI Guidelines' },
+            { page: 'Third-Party Sharing', priority: 'HIGH', reason: 'Credit bureau reporting transparency', regulation: 'CIC Code' }
+        ],
+        optionalLegalPages: [
+            { page: 'License Details', priority: 'CRITICAL', reason: 'RBI/SEBI license display' },
+            { page: 'Investment Methodology', priority: 'HIGH', reason: 'Algorithm transparency' },
+            { page: 'Fee Structure', priority: 'HIGH', reason: 'Complete cost breakdown' }
+        ],
+        applicableRegulations: ['DPDP Act 2023', 'RBI Guidelines', 'SEBI Regulations', 'PMLA 2002', 'IRDAI Guidelines', 'IT Act 2000', 'RBI IT Framework'],
+        riskFactors: ['Sensitive Financial Data', 'Transaction Security', 'Regulatory Compliance', 'Fraud Prevention'],
+        complianceScoreWeights: { privacy: 25, security: 30, consumer: 20, operations: 15, transparency: 10 }
+    },
+
+    healthcare: {
+        name: 'Healthcare / MedTech',
+        icon: '??',
+        color: '#FF6B6B',
+        description: 'Healthcare services or medical platform',
+        indicators: [
+            { pattern: /doctor|physician|specialist|consultation|appointment/gi, weight: 9 },
+            { pattern: /medicine|pharmacy|drug|prescription|medication/gi, weight: 9 },
+            { pattern: /hospital|clinic|diagnostic|lab.test|pathology/gi, weight: 8 },
+            { pattern: /patient|medical.record|health.history|symptom/gi, weight: 8 },
+            { pattern: /insurance|claim|cashless|tpa|emedicine/gi, weight: 7 },
+            { pattern: /telehealth|video.consult|online.doctor|virtual/gi, weight: 8 },
+            { pattern: /ayurveda|yoga|wellness|fitness|nutrition/gi, weight: 6 },
+            { pattern: /appointment|booking|schedule|available.slot/gi, weight: 6 },
+            { pattern: /diagnosis|treatment|therapy|surgery|procedure/gi, weight: 7 },
+            { pattern: /hipaa|phi|protected.health|medical.information/gi, weight: 8 }
+        ],
+        requiredLegalPages: [
+            { page: 'Privacy Policy', priority: 'CRITICAL', reason: 'Sensitive health data - special category', regulation: 'DPDP Act 2023' },
+            { page: 'Medical Disclaimer', priority: 'CRITICAL', reason: 'Not a substitute for professional advice', regulation: 'MCI Guidelines' },
+            { page: 'Patient Consent Form', priority: 'CRITICAL', reason: 'Explicit consent for health data', regulation: 'DPDP Act 2023' },
+            { page: 'Data Security', priority: 'CRITICAL', reason: 'Health records protection', regulation: 'Digital Personal Data Protection Rules' },
+            { page: 'Doctor Credentials', priority: 'HIGH', reason: 'Verify medical qualifications', regulation: 'MCI/NMC' },
+            { page: 'Emergency Disclaimer', priority: 'HIGH', reason: 'Direct to emergency services', regulation: 'Clinical Establishment Act' },
+            { page: 'Telemedicine Guidelines', priority: 'HIGH', reason: 'Telemedicine Practice Guidelines', regulation: 'MoHFW' },
+            { page: 'Pharmacy License', priority: 'CRITICAL', reason: 'Drug sale authorization', regulation: 'Drugs and Cosmetics Act' }
+        ],
+        optionalLegalPages: [
+            { page: 'Clinical Protocols', priority: 'MEDIUM', reason: 'Treatment transparency' },
+            { page: 'Research Ethics', priority: 'MEDIUM', reason: 'If conducting trials' },
+            { page: 'Insurance Partners', priority: 'LOW', reason: 'Cashless network info' }
+        ],
+        applicableRegulations: ['DPDP Act 2023', 'Clinical Establishment Act', 'Drugs and Cosmetics Act', 'MCI/NMC Guidelines', 'Telemedicine Practice Guidelines', 'IT Act 2000', 'MoHFW Standards'],
+        riskFactors: ['Sensitive Health Data', 'Life-Critical Information', 'Prescription Handling', 'Emergency Services'],
+        complianceScoreWeights: { privacy: 35, security: 30, consumer: 15, operations: 10, transparency: 10 }
+    },
+
+    education: {
+        name: 'Education / EdTech',
+        icon: '??',
+        color: '#6C5CE7',
+        description: 'Educational institution or edtech platform',
+        indicators: [
+            { pattern: /course|lesson|class|curriculum|syllabus/gi, weight: 8 },
+            { pattern: /student|learner|enroll|admission|registration/gi, weight: 7 },
+            { pattern: /teacher|instructor|professor|mentor|tutor/gi, weight: 7 },
+            { pattern: /certificate|degree|diploma|accreditation/gi, weight: 8 },
+            { pattern: /exam|test|quiz|assessment|grade/gi, weight: 6 },
+            { pattern: /online.learning|elearning|lms|mooc|coursera/gi, weight: 7 },
+            { pattern: /school|college|university|institute|academy/gi, weight: 7 },
+            { pattern: /fee|scholarship|financial.aid|education.loan/gi, weight: 6 },
+            { pattern: /assignment|homework|project|submission/gi, weight: 5 },
+            { pattern: /parent|guardian|parental.consent|minor/gi, weight: 7 }
+        ],
+        requiredLegalPages: [
+            { page: 'Privacy Policy', priority: 'CRITICAL', reason: 'Student data including minors', regulation: 'DPDP Act 2023' },
+            { page: 'Parental Consent', priority: 'CRITICAL', reason: 'Mandatory for minor data processing', regulation: 'DPDP Act 2023' },
+            { page: 'Terms of Service', priority: 'HIGH', reason: 'Enrollment and course terms', regulation: 'Consumer Protection Act' },
+            { page: 'Refund Policy', priority: 'HIGH', reason: 'Course fee refund rules', regulation: 'CPA 2019' },
+            { page: 'Academic Integrity', priority: 'MEDIUM', reason: 'Plagiarism and cheating policy', regulation: 'Institutional Rules' },
+            { page: 'Certificate Authenticity', priority: 'HIGH', reason: 'Verify issued credentials', regulation: 'UGC/AICTE' },
+            { page: 'Accessibility Statement', priority: 'MEDIUM', reason: 'Inclusive education mandate', regulation: 'RPwD Act' }
+        ],
+        optionalLegalPages: [
+            { page: 'Faculty Credentials', priority: 'MEDIUM', reason: 'Teacher qualifications' },
+            { page: 'Placement Support', priority: 'LOW', reason: 'Job assistance details' },
+            { page: 'Alumni Network', priority: 'LOW', reason: 'Community information' }
+        ],
+        applicableRegulations: ['DPDP Act 2023', 'IT Act 2000', 'CPA 2019', 'UGC/AICTE Guidelines', 'RPwD Act', 'Child Protection Laws'],
+        riskFactors: ['Minor Student Data', 'Assessment Integrity', 'Fee Refunds', 'Certificate Validity'],
+        complianceScoreWeights: { privacy: 30, security: 20, consumer: 20, operations: 15, transparency: 15 }
+    },
+
+    portfolio: {
+        name: 'Portfolio / Personal',
+        icon: '??',
+        color: '#74B9FF',
+        description: 'Personal portfolio or resume site',
+        indicators: [
+            { pattern: /about.me|portfolio|my.work|projects|showcase/gi, weight: 8 },
+            { pattern: /resume|cv|hire.me|freelance|available/gi, weight: 8 },
+            { pattern: /skill|experience|education|qualification/gi, weight: 7 },
+            { pattern: /contact.me|email.me|reach.out|connect/gi, weight: 6 },
+            { pattern: /github|linkedin|twitter|dribbble|behance/gi, weight: 6 },
+            { pattern: /case.study|client|testimonial|review/gi, weight: 5 },
+            { pattern: /designer|developer|photographer|artist|creator/gi, weight: 6 },
+            { pattern: /download.cv|resume.pdf|hire/gi, weight: 7 }
+        ],
+        requiredLegalPages: [
+            { page: 'Privacy Policy', priority: 'MEDIUM', reason: 'Contact form data collection', regulation: 'DPDP Act 2023' },
+            { page: 'Basic Terms', priority: 'LOW', reason: 'Site usage terms', regulation: 'IT Act 2000' }
+        ],
+        optionalLegalPages: [
+            { page: 'About Me', priority: 'LOW', reason: 'Personal introduction' },
+            { page: 'Services', priority: 'LOW', reason: 'Freelance offerings' }
+        ],
+        applicableRegulations: ['DPDP Act 2023', 'IT Act 2000'],
+        riskFactors: ['Contact Information', 'Social Media Links', 'Portfolio Content'],
+        complianceScoreWeights: { privacy: 20, security: 10, consumer: 10, operations: 10, transparency: 50 }
+    },
+
+    agency: {
+        name: 'Agency / Service Business',
+        icon: '??',
+        color: '#FDCB6E',
+        description: 'Digital agency or service-based company',
+        indicators: [
+            { pattern: /agency|studio|firm|company|consulting/gi, weight: 7 },
+            { pattern: /service|solution|offer|we.offer|our.services/gi, weight: 7 },
+            { pattern: /client|project|case.study|portfolio.work/gi, weight: 7 },
+            { pattern: /contact.us|get.quote|request.proposal|rfp/gi, weight: 7 },
+            { pattern: /team|about.us|our.story|who.we.are/gi, weight: 5 },
+            { pattern: /seo|ppc|digital.marketing|branding|development/gi, weight: 6 },
+            { pattern: /proposal|invoice|contract|agreement|retain/gi, weight: 5 },
+            { pattern: /testimonial|review|client.success|result/gi, weight: 5 },
+            { pattern: /award|recognized|featured|certified/gi, weight: 4 },
+            { pattern: /career|job|opening|we're.hiring|join.us/gi, weight: 4 }
+        ],
+        requiredLegalPages: [
+            { page: 'Privacy Policy', priority: 'CRITICAL', reason: 'Client and prospect data collection', regulation: 'DPDP Act 2023' },
+            { page: 'Terms of Service', priority: 'HIGH', reason: 'Engagement terms', regulation: 'Contract Law' },
+            { page: 'Client Data Handling', priority: 'HIGH', reason: 'B2B data responsibilities', regulation: 'DPDP Act 2023' },
+            { page: 'Cookie Policy', priority: 'MEDIUM', reason: 'Marketing and analytics', regulation: 'IT Rules 2021' }
+        ],
+        optionalLegalPages: [
+            { page: 'Process/Methodology', priority: 'LOW', reason: 'How you work' },
+            { page: 'Team Profiles', priority: 'LOW', reason: 'Key personnel' }
+        ],
+        applicableRegulations: ['DPDP Act 2023', 'IT Act 2000', 'Contract Law', 'IT Rules 2021'],
+        riskFactors: ['Client Confidential Data', 'Project IP Rights', 'Employee Data', 'Vendor Management'],
+        complianceScoreWeights: { privacy: 25, security: 15, consumer: 20, operations: 20, transparency: 20 }
+    },
+
+    real_estate: {
+        name: 'Real Estate / Property',
+        icon: '??',
+        color: '#00B894',
+        description: 'Property listing or real estate platform',
+        indicators: [
+            { pattern: /property|real.estate|home|house|apartment|flat/gi, weight: 8 },
+            { pattern: /rent|lease|sale|buy|sell|purchase/gi, weight: 8 },
+            { pattern: /broker|agent|dealer|realtor|property.dealer/gi, weight: 7 },
+            { pattern: /sq.ft|square.feet|area|bhk|bedroom|bathroom/gi, weight: 7 },
+            { pattern: /location|locality|neighborhood|area|city/gi, weight: 5 },
+            { pattern: /price|rate|emi|loan|mortgage|home.loan/gi, weight: 7 },
+            { pattern: /possession|registration|stamp.duty|mutation/gi, weight: 7 },
+            { pattern: /rera|approved|legal|verified|compliant/gi, weight: 8 },
+            { pattern: /amenities|facility|clubhouse|parking|gym/gi, weight: 5 },
+            { pattern: /gallery|images|virtual.tour|360|video/gi, weight: 4 }
+        ],
+        requiredLegalPages: [
+            { page: 'Privacy Policy', priority: 'CRITICAL', reason: 'Buyer/seller personal data', regulation: 'DPDP Act 2023' },
+            { page: 'RERA Disclosure', priority: 'CRITICAL', reason: 'Mandatory RERA registration display', regulation: 'RERA Act 2016' },
+            { page: 'Terms of Service', priority: 'HIGH', reason: 'Listing and brokerage terms', regulation: 'Contract Law' },
+            { page: 'Brokerage Terms', priority: 'HIGH', reason: 'Fee structure clarity', regulation: 'RERA Guidelines' },
+            { page: 'Disclaimer', priority: 'HIGH', reason: 'Information accuracy', regulation: 'Consumer Protection Act' },
+            { page: 'Project Details', priority: 'CRITICAL', reason: 'RERA project info', regulation: 'RERA Act 2016' }
+        ],
+        optionalLegalPages: [
+            { page: 'EMI Calculator', priority: 'LOW', reason: 'Buyer tool' },
+            { page: 'Area Conversion Guide', priority: 'LOW', reason: 'Helpful resource' }
+        ],
+        applicableRegulations: ['RERA Act 2016', 'DPDP Act 2023', 'Consumer Protection Act', 'Stamp Act', 'Registration Act'],
+        riskFactors: ['Large Financial Transactions', 'Property Title Verification', 'Brokerage Transparency', 'Project Completion Risk'],
+        complianceScoreWeights: { privacy: 20, security: 15, consumer: 30, operations: 20, transparency: 15 }
+    },
+
+    food: {
+        name: 'Food / Restaurant',
+        icon: '??',
+        color: '#E17055',
+        description: 'Food delivery, restaurant, or recipe platform',
+        indicators: [
+            { pattern: /food|restaurant|order.food|delivery|menu/gi, weight: 8 },
+            { pattern: /recipe|cook|cuisine|dish|meal/gi, weight: 7 },
+            { pattern: /restaurant|cafe|diner|bistro|eatery/gi, weight: 7 },
+            { pattern: /swiggy|zomato|foodpanda|delivery.partner/gi, weight: 8 },
+            { pattern: /table.reservation|book.a.table|dine.in|dine.out/gi, weight: 7 },
+            { pattern: /cuisine|vegetarian|vegan|non.veg|jain/gi, weight: 6 },
+            { pattern: /rating|review|recommend|must.try/gi, weight: 5 },
+            { pattern: /chef|kitchen|culinary|gourmet/gi, weight: 5 },
+            { pattern: /allergen|ingredient|nutritional|calorie/gi, weight: 6 },
+            { pattern: /fssai|food.license|hygiene|safety/gi, weight: 9 }
+        ],
+        requiredLegalPages: [
+            { page: 'Privacy Policy', priority: 'CRITICAL', reason: 'Customer order data and location', regulation: 'DPDP Act 2023' },
+            { page: 'FSSAI License', priority: 'CRITICAL', reason: 'Mandatory food safety license', regulation: 'FSSAI Act 2006' },
+            { page: 'Terms of Service', priority: 'HIGH', reason: 'Order and delivery terms', regulation: 'CPA 2019' },
+            { page: 'Refund/Cancellation', priority: 'HIGH', reason: 'Food order cancellation policy', regulation: 'CPA 2019' },
+            { page: 'Allergen Information', priority: 'HIGH', reason: 'FSSAI labeling requirement', regulation: 'FSSAI Regulations' },
+            { page: 'Hygiene and Safety', priority: 'MEDIUM', reason: 'Food safety commitment', regulation: 'FSSAI Guidelines' }
+        ],
+        optionalLegalPages: [
+            { page: 'Menu Nutritional Info', priority: 'MEDIUM', reason: 'Health-conscious consumers' },
+            { page: 'Sourcing Policy', priority: 'LOW', reason: 'Ingredient origin' }
+        ],
+        applicableRegulations: ['FSSAI Act 2006', 'DPDP Act 2023', 'CPA 2019', 'Legal Metrology Act', 'Food Safety Regulations'],
+        riskFactors: ['Food Safety Compliance', 'Allergen Disclosure', 'Delivery Hygiene', 'Order Accuracy'],
+        complianceScoreWeights: { privacy: 20, security: 15, consumer: 30, operations: 25, transparency: 10 }
+    },
+
+    travel: {
+        name: 'Travel / Hospitality',
+        icon: '??',
+        color: '#0984E3',
+        description: 'Travel booking or hospitality platform',
+        indicators: [
+            { pattern: /flight|hotel|booking|reservation|travel/gi, weight: 8 },
+            { pattern: /holiday|vacation|trip|tour|package/gi, weight: 7 },
+            { pattern: /makeMyTrip|cleartrip|booking.com|airbnb|oyo/gi, weight: 8 },
+            { pattern: /destination|itinerary|explore|discover/gi, weight: 6 },
+            { pattern: /visa|passport|immigration|travel.doc/gi, weight: 7 },
+            { pattern: /cab|taxi|rental|transport|transfer/gi, weight: 6 },
+            { pattern: /review|rating|experience|traveler/gi, weight: 5 },
+            { pattern: /deal|offer|discount|promo.code/gi, weight: 5 },
+            { pattern: /check.in|check.out|amenity|room.type/gi, weight: 7 },
+            { pattern: /cancellation|refund|reschedule|change/gi, weight: 7 }
+        ],
+        requiredLegalPages: [
+            { page: 'Privacy Policy', priority: 'CRITICAL', reason: 'Travel and passport data', regulation: 'DPDP Act 2023' },
+            { page: 'Cancellation Policy', priority: 'CRITICAL', reason: 'Complex travel cancellation rules', regulation: 'CPA 2019' },
+            { page: 'Terms of Service', priority: 'CRITICAL', reason: 'Booking terms and conditions', regulation: 'Airline/Hotel Regulations' },
+            { page: 'Refund Policy', priority: 'CRITICAL', reason: 'Travel refund timelines', regulation: 'CPA 2019' },
+            { page: 'Price Disclosure', priority: 'HIGH', reason: 'Hidden charges prevention', regulation: 'Legal Metrology Act' },
+            { page: 'Grievance Officer', priority: 'HIGH', reason: 'Consumer complaints handling', regulation: 'CPA 2019' }
+        ],
+        optionalLegalPages: [
+            { page: 'Travel Insurance', priority: 'MEDIUM', reason: 'Recommended add-on' },
+            { page: 'COVID Advisory', priority: 'LOW', reason: 'Travel health info' }
+        ],
+        applicableRegulations: ['DPDP Act 2023', 'CPA 2019', 'Hotel Laws', 'Carriage by Air Act', 'Legal Metrology Act', 'IT Rules 2021'],
+        riskFactors: ['Passport/ID Data', 'International Transfers', 'Cancellation Complexity', 'Vendor Reliability'],
+        complianceScoreWeights: { privacy: 25, security: 20, consumer: 30, operations: 15, transparency: 10 }
+    },
+
+    job_portal: {
+        name: 'Job Portal / HR Tech',
+        icon: '??',
+        color: '#636E72',
+        description: 'Job board or recruitment platform',
+        indicators: [
+            { pattern: /job|career|vacancy|opening|hiring|recruitment/gi, weight: 8 },
+            { pattern: /resume|cv|apply|application|candidate/gi, weight: 8 },
+            { pattern: /employer|recruiter|company|post.job/gi, weight: 7 },
+            { pattern: /salary|ctc|compensation|package|pay/gi, weight: 7 },
+            { pattern: /skill|experience|qualification|requirement/gi, weight: 6 },
+            { pattern: /interview|shortlist|screen|assessment/gi, weight: 6 },
+            { pattern: /naukri|indeed|linkedin|monster|shine/gi, weight: 7 },
+            { pattern: /remote|work.from.home|hybrid|onsite/gi, weight: 5 },
+            { pattern: /benefit|perk|insurance|pf|gratuity/gi, weight: 5 },
+            { pattern: /notice.period|joining|offer.letter/gi, weight: 6 }
+        ],
+        requiredLegalPages: [
+            { page: 'Privacy Policy', priority: 'CRITICAL', reason: 'Resume and personal data', regulation: 'DPDP Act 2023' },
+            { page: 'Terms for Job Seekers', priority: 'HIGH', reason: 'Candidate usage terms', regulation: 'IT Act 2000' },
+            { page: 'Terms for Employers', priority: 'HIGH', reason: 'Recruiter obligations', regulation: 'Contract Law' },
+            { page: 'Data Retention', priority: 'HIGH', reason: 'Resume storage limits', regulation: 'DPDP Act 2023' },
+            { page: 'Non-Discrimination', priority: 'MEDIUM', reason: 'Equal opportunity commitment', regulation: 'Constitution of India' },
+            { page: 'Grievance Redressal', priority: 'MEDIUM', reason: 'Complaint handling', regulation: 'CPA 2019' }
+        ],
+        optionalLegalPages: [
+            { page: 'Salary Benchmark', priority: 'LOW', reason: 'Transparency tool' },
+            { page: 'Company Reviews Policy', priority: 'MEDIUM', reason: 'Review moderation' }
+        ],
+        applicableRegulations: ['DPDP Act 2023', 'IT Act 2000', 'CPA 2019', 'Equal Opportunity Laws', 'Contract Labour Act'],
+        riskFactors: ['Resume Database', 'Salary Data', 'Discrimination Claims', 'Data Breach Impact'],
+        complianceScoreWeights: { privacy: 30, security: 20, consumer: 20, operations: 15, transparency: 15 }
+    }
+};

@@ -1,0 +1,1269 @@
+﻿const express = require('express');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+const CONFIG = {
+  API_KEY: process.env.SCRAPER_API_KEY || 'legalgen-v2-key-2024',
+  ALLOWED_ORIGINS: (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(','),
+  USER_AGENT: 'LegalGen-Pro/3.0'
+};
+
+app.use(express.json());
+app.use(cors({ origin: CONFIG.ALLOWED_ORIGINS }));
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 50 }));
+
+function auth(req, res, next) {
+  const key = req.headers['x-api-key'];
+  if (!key || key !== CONFIG.API_KEY) return res.status(401).json({ error: 'Invalid API key' });
+  next();
+}
+
+function isValidURL(url) {
+  try {
+    const u = new URL(url);
+    return ['http:', 'https:'].includes(u.protocol) && !u.hostname.match(/^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/);
+  } catch { return false; }
+}
+
+// ---------------------------------------------------------------
+// ?? ULTRA SMART BUSINESS INTELLIGENCE ENGINE v3.0
+// ---------------------------------------------------------------
+
+/**
+ * Advanced Business Type Detection with Multiple Signals
+ */
+const BUSINESS_PROFILES = {
+
+  // --- E-COMMERCE --------------------------------------
+  'ecommerce': {
+    name: 'E-Commerce / Online Store',
+    icon: '??',
+
+    // Detection signals with weights
+    signals: {
+      htmlPatterns: [
+        { pattern: /cart|basket|checkout/i, weight: 5, label: 'Cart/Checkout' },
+        { pattern: /add.?to.?cart|add.?to.?bag|add.?to.?wishlist/i, weight: 5, label: 'Add to Cart' },
+        { pattern: /product|price|\$|shipping|delivery|\?/i, weight: 3, label: 'Product/Price' },
+        { pattern: /order|purchase|buy.?now|i?.want.?this|shop.?now/i, weight: 3, label: 'Buy Actions' },
+        { pattern: /discount|coupon|promo|offer|deal|sale/i, weight: 2, label: 'Promotions' },
+        { pattern: /inventory|stock|out.of.stock|in.stock/i, weight: 2, label: 'Inventory' },
+        { pattern: /review|rating|testimonial.*product/i, 871weight: 1, label: 'Reviews' }
+      ],
+      urlPatterns: [/shop/, /store/, /buy/, /product/, /item/, /cart/],
+      techPatterns: [/woocommerce/, /shopify/, /magento/, /bigcommerce/, /prestashop/],
+      metaPatterns: [/'product'|product:|"@type":\s*"product"/i],
+      schemaTypes: ['Product', 'Offer', 'ItemList']
+    },
+
+    // Indian regulations that apply
+    regulations: [
+      { id: 'consumer-protection-2019', name: 'Consumer Protection Act', applicability: 'mandatory', penalty: 'Up to ?10 lakh + imprisonment' },
+      { id: 'ecommerce-rules-2020', name: 'E-Commerce Rules 2020', applicability: 'mandatory', penalty: 'Cancellation of registration' },
+      { id: 'legal-metrology', name: 'Legal Metrology (Packaging)', applicability: 'required', penalty: '?25,000 per violation' },
+      { id: 'gst-compliance', name: 'GST Compliance', applicability: 'mandatory', penalty: '18% interest + penalty' }
+    ],
+
+    // Required legal pages WITH context
+    requiredPages: [
+      {
+        type: 'privacy-policy',
+        label: 'Privacy Policy',
+        priority: 'critical',
+        reason: 'Collects customer PII: name, email, phone, address, payment info',
+        riskIfMissing: 'DPDP Act violation - up to ?250 crore fine',
+        effort: 'medium',
+        templateAvailable: true,
+        urgency: 'immediate'
+      },
+      {
+        type: 'refund-policy',
+        label: 'Refund & Return Policy',
+        priority: 'critical',
+        reason: 'Consumer Protection Act mandates clear refund policy for e-commerce',
+        riskIfMissing: 'CPA violation - consumer can claim full refund + compensation',
+        effort: 'medium',
+        templateAvailable: true,
+        urgency: 'immediate'
+      },
+      {
+        type: 'cancellation-policy',
+        label: 'Order Cancellation Policy',
+        priority: 'high',
+        reason: 'E-commerce rules require cancellation mechanism',
+        riskIfMissing: 'Forced refunds + consumer court cases',
+        effort: 'small',
+        templateAvailable: true,
+        urgency: 'urgent'
+      },
+      {
+        type: 'shipping-delivery',
+        label: 'Shipping & Delivery Information',
+        priority: 'high',
+        reason: 'Must disclose delivery timelines, charges, areas',
+        riskIfMissing: 'False advertising complaint under CPA',
+        effort: 'small',
+        templateAvailable: true,
+        urgency: 'urgent'
+      },
+      {
+        type: 'terms-of-service',
+        label: 'Terms & Conditions of Sale',
+        priority: 'critical',
+        reason: 'Governs purchase contract, liability, warranties',
+        riskIfMissing: 'Unenforceable contracts, unlimited liability',
+        effort: 'large',
+        templateAvailable: true,
+        urgency: 'immediate'
+      },
+      {
+        type: 'cookie-policy',
+        label: 'Cookie Consent & Policy',
+        priority: 'high',
+        reason: 'E-commerce uses analytics, ads, retargeting cookies',
+        riskIfMissing: 'IT Rules 2021 violation, blocking in EU',
+        effort: 'medium',
+        templateAvailable: true,
+        urgency: 'urgent'
+      },
+      {
+        type: 'payment-security',
+        label: 'Payment Security Disclosure',
+        priority: 'high',
+        reason: 'PCI-DSS compliance, builds trust',
+        riskIfMissing: 'PCI fines up to $100k/month + breach costs',
+        effort: 'small',
+        templateAvailable: false,
+        urgency: 'recommended'
+      }
+    ],
+
+    optionalPages: [
+      { type: 'faq', label: 'FAQ', reason: 'Reduces support queries by 30%' },
+      { type: 'track-order', label: 'Order Tracking', reason: 'Customer expectation' },
+      { page: 'Size Guide', priority: 'MEDIUM', reason: 'Reduces returns by 20%' },
+      { type: 'affiliate-disclosure', label: 'Affiliate Disclosure', reason: 'FTC/ASCI requirement if applicable' }
+    ]
+  },
+
+  // --- SaaS / SOFTWARE ----------------------------------
+  'saas': {
+    name: 'SaaS / Software Platform',
+    icon: '??',
+
+    signals: {
+      htmlPatterns: [
+        { pattern: /login|sign.?in|authenticate/i, weight: 4, label: 'Login System' },
+        { pattern: /sign.?up|register|create.?account|get.?started/i, weight: 3, label: 'Registration' },
+        { pattern: /pricing|plan|subscription|monthly|annual|per.?user/i, weight: 5, label: 'Pricing Plans' },
+        { pattern: /free.?trial|demo|request.?demo/i, weight: 3, label: 'Trial/Demo' },
+        { pattern: /dashboard|workspace|project|board/i, weight: 2, label: 'Dashboard UI' },
+        { pattern: /api|documentation|integrat|developer|webhook/i, weight: 2, label: 'API/Dev Tools' },
+        { pattern: /feature|solution|platform|deploy|host/i, weight: 1, label: 'Features' }
+      ],
+      urlPatterns: [/app/, /portal/, /dashboard/, /docs/, /api/],
+      techPatterns: [/nextjs|nuxt|gatsby/, /stripe/, /auth0|clerk|supabase/],
+      schemaTypes: ['SoftwareApplication', 'WebApplication']
+    },
+
+    regulations: [
+      { id: 'dpdp-act', name: 'Digital Personal Data Protection Act', applicability: 'mandatory', penalty: 'Up to ?250 crore' },
+      { id: 'it-act-2000', name: 'IT Act 2000 (Section 43A)', applicability: 'mandatory', penalty: 'Compensation for affected parties' },
+      { id: 'it-rules-2011', name: 'Reasonable Security Practices', applicability: 'required', penalty: 'Liability for data breaches' }
+    ],
+
+    requiredPages: [
+      {
+        type: 'privacy-policy',
+        label: 'Privacy Policy',
+        priority: 'critical',
+        reason: 'SaaS processes user profiles, usage data, possibly sensitive data',
+        riskIfMissing: 'DPDP Act - class action risk, trust damage',
+        effort: 'large',
+        templateAvailable: true,
+        urgency: 'immediate'
+      },
+      {
+        type: 'terms-of-service',
+        label: 'Terms of Service (ToS)',
+        priority: 'critical',
+        reason: 'Defines subscription terms, SLA, IP rights, limitations',
+        riskIfMissing: 'Unenforceable subscriptions, IP theft risk',
+        effort: 'large',
+        templateAvailable: true,
+        urgency: 'immediate'
+      },
+      {
+        type: 'sla',
+        label: 'Service Level Agreement (SLA)',
+        priority: 'high',
+        reason: 'Enterprise clients expect uptime guarantees, response times',
+        riskIfMissing: 'Lost enterprise deals, no liability caps',
+        effort: 'large',
+        templateAvailable: true,
+        urgency: 'urgent'
+      },
+      {
+        type: 'acceptable-use',
+        label: 'Acceptable Use Policy (AUP)',
+        priority: 'medium',
+        reason: 'Prevents abuse of platform, protects from liability',
+        riskIfMissing: 'Platform abuse, hosting liability',
+        effort: 'small',
+        templateAvailable: true,
+        urgency: 'recommended'
+      },
+      {
+        type: 'dpa',
+        label: 'Data Processing Agreement (DPA)',
+        priority: 'high',
+        reason: 'Required for B2B SaaS handling client data',
+        riskIfMissing: 'Cannot sign enterprise clients (GDPR requirement)',
+        effort: 'large',
+        templateAvailable: true,
+        urgency: 'recommended'
+      },
+      {
+        type: 'security-practices',
+        label: 'Security Practices & Certifications',
+        priority: 'medium',
+        reason: 'SOC 2, ISO 27001, encryption details build trust',
+        riskIfMissing: 'Lost enterprise deals to competitors',
+        effort: 'medium',
+        templateAvailable: false,
+        urgency: 'recommended'
+      },
+      {
+        type: 'gdpr-compliance',
+        label: 'GDPR/Data Protection Page',
+        priority: 'medium',
+        reason: 'EU customers need DPO, data transfers, rights info',
+        riskIfMissing: 'Cannot serve EU customers legally',
+        effort: 'medium',
+        templateAvailable: true,
+        urgency: 'if-eu-customers'
+      },
+      {
+        type: 'status-page',
+        label: 'System Status Page',
+        priority: 'low',
+        reason: 'Transparency during outages reduces support load',
+        riskIfMinimal: 'Minor - customer convenience',
+        effort: 'small',
+        templateAvailable: false,
+        urgency: 'optional'
+      }
+    ],
+
+    optionalPages: [
+      { type: 'changelog', label: 'Changelog', reason: 'Product transparency' },
+      { type: 'roadmap', label: 'Product Roadmap', reason: 'Builds community' },
+      { type: 'compliance', label: 'Compliance Certifications', reason: 'SOC2, GDPR, ISO badges' }
+    ]
+  },
+
+  // --- BLOG / CONTENT ------------------------------------
+  'blog': {
+    name: 'Blog / Content Website',
+    icon: '??',
+
+    signals: {
+      htmlPatterns: [
+        { pattern: /post|article|blog|news|story|read.?more/i, weight: 5, label: 'Blog Posts' },
+        { pattern: /author|published|by\s+\w+|written.?by/i, weight: 3, label: 'Author Info' },
+        { pattern: /category|archive|tag|topic/i, weight: 2, label: 'Categories' },
+        { pattern: /comment|reply|leave.?a.?comment|discuss/i, weight: 2, label: 'Comments' },
+        { pattern: /subscribe|newsletter|follow|rss|feed/i, weight: 2, label: 'Subscription' },
+        { pattern: /share|tweet|facebook|linkedin/i, weight: 1, label: 'Social Share' }
+      ],
+      urlPatterns: [/blog/, /post/, /article/, /news/, /feed/],
+      techPatterns: [/wordpress|ghost|medium|substack|blogger|hashnode/],
+      schemaTypes: ['BlogPosting', 'Article']
+    },
+
+    regulations: [
+      { id: 'dpdp-act', name: 'DPDP Act', applicability: 'if-collects-data', penalty: 'Lower risk for blogs' },
+      { id: 'it-rules-2021', name: 'IT Rules (Intermediary)', applicability: 'if-comments', penalty: 'Safe harbor provisions' }
+    ],
+
+    requiredPages: [
+      {
+        type: 'privacy-policy',
+        label: 'Privacy Policy',
+        priority: 'high',
+        reason: 'Analytics, comments, newsletter subscriptions collect data',
+        riskIfMissing: 'Comment form data unprotected, analytics non-compliant',
+        effort: 'small',
+        templateAvailable: true,
+        urgency: 'recommended'
+      },
+      {
+        type: 'cookie-policy',
+        label: 'Cookie Policy / Consent',
+        priority: 'medium',
+        reason: 'Most blogs use Google Analytics, ads, social widgets',
+        riskIfMissing: 'Potential blocking in EU, ad revenue loss',
+        effort: 'small',
+        templateAvailable: true,
+        urgency: 'recommended'
+      },
+      {
+        type: 'terms-for-comments',
+        label: 'Commenting Terms/Moderation Policy',
+        priority: 'low',
+        reason: 'If allowing user comments, need moderation rules',
+        riskIfMinimal: 'Low - user-generated content liability',
+        effort: 'small',
+        templateAvailable: true,
+        urgency: 'optional'
+      }
+    ],
+
+    optionalPages: [
+      { type: 'about', label: 'About Page', reason: 'Author credibility, E-E-A-T for SEO' },
+      { type: 'contact', label: 'Contact Page', reason: 'Reader inquiries, opportunities' },
+      { type: 'disclaimer', label: 'Disclaimer', reason: 'Content accuracy, affiliate links' },
+      { type: 'affiliate-disclosure', label: 'Affiliate Disclosure', reason: 'FTC/ASI mandatory if monetized' },
+      { type: 'guest-posting', label: 'Guest Post Guidelines', reason: 'Quality control' }
+    ]
+  },
+
+  // --- FINANCIAL SERVICES ---------------------------------
+  'finance': {
+    name: 'Financial Services / Fintech',
+    icon: '??',
+
+    signals: {
+      htmlPatterns: [
+        { pattern: /loan|credit|borrow|emi|interest.?rate/i, weight: 5, label: 'Lending' },
+        { pattern: /insurance|policy|premium|claim|coverage/i, weight: 5, label: 'Insurance' },
+        { pattern: /invest|trading|stock|mutual.?fund|portfolio/i, weight: 5, label: 'Investments' },
+        { pattern: /bank|account|deposit|withdrawal|transfer/i, weight: 4, label: 'Banking' },
+        { pattern: /rbi|sebi|fca|regulated|compliance|license/i, weight: 5, label: 'Regulatory' },
+        { pattern: /calculator|eligibility|apply.?now/i, weight: 3, label: 'Tools' },
+        { pattern: /kyc|aadhaar|pan|identity.?verification/i, weight: 4, label: 'KYC' }
+      ],
+      urlPatterns: [/loan/, /insurance/, /invest/, /trade/, /account/],
+      techPatterns: [],
+      schemaTypes: ['FinancialProduct', 'BankOrCreditUnion']
+    },
+
+    regulations: [
+      { id: 'rbi-guidelines', name: 'RBI Guidelines', applicability: 'mandatory', penalty: 'License cancellation, criminal prosecution' },
+      { id: 'sebi-regulations', name: 'SEBI Regulations', applicability: 'if-investments', penalty: '?1 crore+ + debarment' },
+      { id: 'irdai-guidelines', name: 'IRDAI Guidelines', applicability: 'if-insurance', penalty: 'License cancellation' },
+      { id: 'dpdp-act-finance', name: 'DPDP Act (Financial Data)', applicability: 'mandatory', penalty: '?250 crore + personal liability of directors' }
+    ],
+
+    requiredPages: [
+      {
+        type: 'privacy-policy',
+        label: 'Privacy Policy (Financial Grade)',
+        priority: 'critical',
+        reason: 'Handles PAN, Aadhaar, bank accounts, credit scores - HIGHLY SENSITIVE',
+        riskIfMissing: 'RBI audit failure, license revocation, criminal liability',
+        effort: 'very-large',
+        templateAvailable: false,
+        urgency: 'immediate'
+      },
+      {
+        type: 'terms-of-service',
+        label: 'Terms of Use + Financial Disclaimers',
+        priority: 'critical',
+        reason: 'Investment disclaimers, not SEBI registered, risk warnings mandated',
+        riskIfMissing: 'SEBI action for misleading communications, investor lawsuits',
+        effort: 'very-large',
+        templateAvailable: false,
+        urgency: 'immediate'
+      },
+      {
+        type: 'risk-disclosure',
+        label: 'Risk Factors & Disclosures',
+        priority: 'critical',
+        reason: 'Mandatory investment risk disclosure, product risks',
+        riskIfMissing: 'SEBI prohibition, investor compensation claims',
+        effort: 'large',
+        templateAvailable: false,
+        urgency: 'immediate'
+      },
+      {
+        type: 'grievance-redressal',
+        label: 'Grievance Redressal Mechanism',
+        priority: 'critical',
+        reason: 'RBI/SEBI/IRDAI mandate - Ombudsman info required',
+        riskIfMissing: 'Regulatory fine, license suspension',
+        effort: 'medium',
+        templateAvailable: true,
+        urgency: 'immediate'
+      },
+      {
+        type: 'licenses',
+        label: 'Licenses & Registrations',
+        priority: 'critical',
+        reason: 'Display RBI/SEBI/IRDAI registration numbers',
+        riskIfMissing: 'Illegal operation, fraud investigation',
+        effort: 'small',
+        templateAvailable: false,
+        urgency: 'immediate'
+      },
+      {
+        type: 'security-practices',
+        label: 'Information Security Practices',
+        priority: 'critical',
+        reason: 'RBI IT framework compliance, encryption, 2FA disclosure',
+        riskIfMissing: 'Data breach = massive fines + reputational destruction',
+        effort: 'very-large',
+        templateAvailable: false,
+        urgency: 'immediate'
+      }
+    ],
+
+    optionalPages: [
+      { type: 'rates-charges', label: 'Rates & Charges', reason: 'Transparency requirement' },
+      { type: 'fair-practice', label: 'Fair Practice Code', reason: 'RBI mandate' },
+      { type: 'consolidated-privacy', label: 'Consolidated Privacy Policy', reason: 'Group companies' }
+    ]
+  },
+
+  // --- HEALTHCARE / MEDICAL ------------------------------
+  'healthcare': {
+    name: 'Healthcare / Telemedicine',
+    icon: '??',
+
+    signals: {
+      htmlPatterns: [
+        { pattern: /doctor|physician|specialist|consultant/i, weight: 4, label: 'Doctors' },
+        { pattern: /patient|appointment|book|schedule|clinic/i, weight: 4, label: 'Appointments' },
+        { pattern: /treatment|therapy|procedure|surgery|medicine/i, weight: 3, label: 'Treatments' },
+        { pattern: /telehealth|telemedicine|video.?consult|online.?doctor/i, weight: 5, label: 'Telemedicine' },
+        { pattern: /prescription|diagnosis|report|test.?result/i, weight: 3, label: 'Medical Records' },
+        { pattern: /hipaa|phi|protected.?health|medical.?records/i, weight: 5, label: 'HIPAA/PHI' },
+        { pattern: /insurance|empanelled|tpa|cashless/i, weight: 3, label: 'Insurance' }
+      ],
+      urlPatterns: [/doctor/, /patient/, /appointment/, /clinic/, /health/],
+      techPatterns: [],
+      schemaTypes: ['MedicalClinic', 'Physician', 'HealthAndBeautyBusiness']
+    },
+
+    regulations: [
+      { id: 'it-rules-health', name: 'IT Rules 2011 (Sensitive Personal Data)', applicability: 'mandatory', penalty: 'Compensation per patient' },
+      { id: 'dpdp-health', name: 'DPDP Act (Health Data)', applicability: 'mandatory', penalty: 'Higher base - health data is sensitive' },
+      { id: 'telemedicine-gelines', name: 'Telemedicine Practice Guidelines', applicability: 'if-telemedicine', penalty: 'Medical Council action' },
+      { id: 'drugs-cosmetics-act', name: 'Drugs & Cosmetics Act', applicability: 'if-sells-medicine', penalty: 'Imprisonment' }
+    ],
+
+    requiredPages: [
+      {
+        type: 'privacy-policy',
+        label: 'Privacy Policy (HIPAA-style)',
+        priority: 'critical',
+        reason: 'Handles patient names, medical history, diagnoses - PROTECTED HEALTH INFO',
+        riskIfMissing: 'Criminal liability, medical council action, patient lawsuits',
+        effort: 'very-large',
+        templateAvailable: false,
+        urgency: 'immediate'
+      },
+      {
+        type: 'medical-disclaimer',
+        label: 'Medical Disclaimer',
+        priority: 'critical',
+        reason: 'Must clarify: information only, not diagnosis, consult doctor',
+        riskIfMissing: 'Malpractice liability for every misinterpretation',
+        effort: 'small',
+        templateAvailable: true,
+        urgency: 'immediate'
+      },
+      {
+        type: 'doctor-credentials',
+        label: 'Doctor Credentials & Qualifications',
+        priority: 'critical',
+        reason: 'Display degrees, registrations, experience - mandatory',
+        riskIfMissing: 'Practicing without credentials = criminal offense',
+        effort: 'medium',
+        templateAvailable: false,
+        urgency: 'immediate'
+      },
+      {
+        type: 'patient-rights',
+        label: 'Patient Rights & Responsibilities',
+        priority: 'high',
+        reason: 'Informed consent, records access, confidentiality',
+        riskIfMissing: 'Patient complaints, regulatory issues',
+        effort: 'medium',
+        templateAvailable: true,
+        urgency: 'urgent'
+      },
+      {
+        type: 'data-security',
+        label: 'Health Data Security Practices',
+        priority: 'critical',
+        reason: 'Encryption, access controls, audit trails for PHI',
+        riskIfMissing: 'Data breach = catastrophic (per-patient notification + fines)',
+        effort: 'very-large',
+        templateAvailable: false,
+        urgency: 'immediate'
+      },
+      {
+        type: 'emergency-disclaimer',
+        label: 'Emergency Disclaimer',
+        priority: 'high',
+        reason: 'Not for emergencies, call local emergency',
+        riskIfMinimal: 'Liability if someone delays care',
+        effort: 'small',
+        templateAvailable: true,
+        urgency: 'urgent'
+      }
+    ],
+
+    optionalPages: [
+      { type: 'insurance-partners', label: 'Insurance Partners', reason: 'Cashless facility info' },
+      { type: 'second-opinion', label: 'Second Opinion Policy', reason: 'Patient rights' },
+      { type: 'feedback', label: 'Patient Feedback', reason: 'Transparency' }
+    ]
+  },
+
+  // --- EDUCATION / ED-TECH ------------------------------
+  'education': {
+    name: 'Education / Ed-Tech Platform',
+    icon: '??',
+
+    signals: {
+      htmlPatterns: [
+        { pattern: /course|lesson|learn|tutorial|module/i, weight: 4, label: 'Courses' },
+        { pattern: /student|enroll|register|admission|batch/i, weight: 3, label: 'Enrollment' },
+        { pattern: /instructor|teacher|mentor|professor|faculty/i, weight: 3, label: 'Instructors' },
+        { pattern: /certificate|degree|diploma|completion|verify/i, weight: 3, label: 'Certification' },
+        { pattern: /exam|test|assessment|quiz|grade/i, weight: 2, label: 'Assessments' },
+        { pattern: /lms|learning.?management|moodle|canvas|blackboard/i, weight: 5, label: 'LMS' },
+        { pattern: /live|webinar|recorded|self.?paced/i, weight: 2, label: 'Delivery Mode' }
+      ],
+      urlPatterns: [/course/, /learn/, /student/, /academy/, /class/],
+      techPatterns: [/teachable|thinkific|kajabi|podia|canvas/],
+      schemaTypes: ['Course', 'EducationalOrganization']
+    },
+
+    regulations: [
+      { id: 'dpdp-education', name: 'DPDP Act (Student Data)', applicability: 'mandatory', penalty: 'Children data = higher penalty' },
+      { id: 'it-act-education', name: 'IT Act (Exam/Certificate integrity)', applicability: 'required', penalty: 'Certificate forgery issues' }
+    ],
+
+    requiredPages: [
+      {
+        type: 'privacy-policy',
+        label: 'Privacy Policy (Student Data Focus)',
+        priority: 'critical',
+        reason: 'Students often minors, handles grades, attendance, sometimes Aadhaar',
+        riskIfMissing: 'Parental consent issues, child protection violations',
+        effort: 'large',
+        templateAvailable: true,
+        urgency: 'immediate'
+      },
+      {
+        type: 'terms-of-service',
+        label: 'Terms of Service / Enrollment Terms',
+        priority: 'critical',
+        reason: 'Course access, refund policies, certification terms',
+        riskIfMissing: 'Disputes over course access, refund demands',
+        effort: 'large',
+        templateAvailable: true,
+        urgency: 'immediate'
+      },
+      {
+        type: 'refund-cancellation',
+        label: 'Refund & Cancellation Policy',
+        priority: 'high',
+        reason: 'Course dropout rates high, must define refund windows',
+        riskIfMissing: 'Chargebacks, consumer forum complaints',
+        effort: 'medium',
+        templateAvailable: true,
+        urgency: 'urgent'
+      },
+      {
+        type: 'intellectual-property',
+        label: 'IP & Content Usage Rights',
+        priority: 'high',
+        reason: 'Who owns course content? Can students download? Recording allowed?',
+        riskIfMissing: 'Content piracy, instructor disputes',
+        effort: 'medium',
+        templateAvailable: true,
+        urgency: 'urgent'
+      },
+      {
+        type: 'accreditation',
+        label: 'Accreditation & Certification Info',
+        priority: 'medium',
+        reason: 'Is certificate industry recognized? Value proposition',
+        riskIfMinimal: 'Marketing issue mostly',
+        effort: 'small',
+        templateAvailable: false,
+        urgency: 'recommended'
+      },
+      {
+        type: 'accessibility',
+        label: 'Accessibility Statement',
+        priority: 'medium',
+        reason: 'Education should be accessible to differently-abled students',
+        riskIfMinor: 'Reputation, potential discrimination claims',
+        effort: 'medium',
+        templateAvailable: false,
+        urgency: 'recommended'
+      }
+    ],
+
+    optionalPages: [
+      { type: 'instructor-bio', label: 'Instructor Profiles', reason: 'Trust building' },
+      { type: 'curriculum', label: 'Curriculum/Syllabus', reason: 'Transparency' },
+      { type: 'student-reviews', label: 'Student Reviews', reason: 'Social proof' }
+    ]
+  },
+
+  // --- AGENCY / CONSULTANCY -----------------------------
+  'agency': {
+    name: 'Digital Agency / Consultancy',
+    icon: '??',
+
+    signals: {
+      htmlPatterns: [
+        { pattern: /agency|consultant|solutions|we.?offer|services/i, weight: 4, label: 'Services' },
+        { pattern: /client|case.?study|portfolio|work|project/i, weight: 4, label: 'Portfolio' },
+        { pattern: /team|about.?us|our.?process|methodology/i, weight: 2, label: 'Team/Process' },
+        { pattern: /strategy|marketing|development|design|brand/i, weight: 2, label: 'Service Types' },
+        { pattern: /hire|contact|proposal|quote|estimate/i, weight: 3, label: 'Hiring Flow' },
+        { pattern: /retainer|engagement|deliverable|milestone/i, weight: 2, label: 'Engagement Model' }
+      ],
+      urlPatterns: [/agency/, /services/, /work/, /about/, /contact/],
+      techPatterns: [],
+      schemaTypes: ['ProfessionalService', 'LocalBusiness']
+    },
+
+    regulations: [
+      { id: 'contract-act', name: 'Indian Contract Act', applicability: 'mandatory', penalty: 'Contract disputes' },
+      { id: 'gst-services', name: 'GST (Services)', applicability: 'mandatory', penalty: 'Tax evasion' }
+    ],
+
+    requiredPages: [
+      {
+        type: 'privacy-policy',
+        label: 'Privacy Policy',
+        priority: 'high',
+        reason: 'Client data, visitor analytics, contact forms',
+        riskIfMissing: 'Client trust issues, DPDP risk',
+        effort: 'medium',
+        templateAvailable: true,
+        urgency: 'recommended'
+      },
+      {
+        type: 'service-terms',
+        label: 'Service Terms / Engagement Terms',
+        priority: 'high',
+        reason: 'Scope creep protection, payment terms, IP ownership',
+        riskIfMissing: 'Scope creep disputes, payment delays',
+        effort: 'large',
+        templateAvailable: true,
+        urgency: 'recommended'
+      },
+      {
+        type: 'data-processing',
+        label: 'Client Data Processing Terms',
+        priority: 'medium',
+        reason: 'How agency handles client data, campaigns, analytics',
+        riskIfMissing: 'Client data breach = agency liable',
+        effort: 'medium',
+        templateAvailable: true,
+        urgency: 'recommended'
+      }
+    ],
+
+    optionalPages: [
+      { type: 'team', label: 'Team Page', reason: 'Trust, expertise showcase' },
+      { type: 'process', label: 'Process/Methodology', reason: 'Differentiation' },
+      { type: 'pricing', label: 'Pricing/Packages', reason: 'Transparency' }
+    ]
+  },
+
+  // --- PORTFOLIO / FREELANCER --------------------------
+  'portfolio': {
+    name: 'Portfolio / Freelancer',
+    icon: '??',
+
+    signals: {
+      htmlPatterns: [
+        { pattern: /portfolio|work|project|case.?study/i, weight: 5, label: 'Portfolio' },
+        { pattern: /hire|freelance|available|for.?hire|let'?s.?work/i, weight: 4, label: 'Hiring' },
+        { pattern: /skill|experience|expertise|specialist/i, weight: 2, label: 'Skills' },
+        { pattern: /resume|cv|download|linkedin/i, weight: 2, label: 'Resume' },
+        { pattern: /contact|email|message/i, weight: 1, label: 'Contact' }
+      ],
+      urlPatterns: [/portfolio/, /work/, /hire/, /me/],
+      techPatterns: [],
+      schemaTypes: ['Person', 'WebSite']
+    },
+
+    regulations: [
+      { id: 'gst-freelance', name: 'GST Registration', applicability: 'if-over-threshold', penalty: 'Tax evasion' }
+    ],
+
+    requiredPages: [
+      {
+        type: 'privacy-policy',
+        label: 'Basic Privacy Policy',
+        priority: 'low',
+        reason: 'Contact form data collection minimal',
+        riskIfMinimal: 'Very low risk for simple portfolio',
+        effort: 'small',
+        templateAvailable: true,
+        urgency: 'optional'
+      }
+    ],
+
+    optionalPages: [
+      { type: 'about', label: 'About Me', reason: 'Personality, story' },
+      { type: 'services', label: 'Services/Rates', reason: 'Clarity on offerings' },
+      { type: 'testimonials', label: 'Testimonials', reason: 'Social proof' }
+    ]
+  }
+};
+
+// ---------------------------------------------------------------
+// ADVANCED DETECTION FUNCTIONS
+// ---------------------------------------------------------------
+
+/**
+ * Multi-signal business type detection
+ */
+function detectBusinessTypeAdvanced(html, url, technologies) {
+  const scores = {};
+  const evidence = {};
+
+  const hostname = new URL(url).hostname;
+  const tld = hostname.split('.').pop();
+
+  for (const [type, profile] of Object.entries(BUSINESS_PROFILES)) {
+    let score = 0;
+    const matchedSignals = [];
+
+    // 1. HTML Pattern Matching (strongest signal)
+    if (profile.signals.htmlPatterns) {
+      for (const signal of profile.signals.htmlPatterns) {
+        if (signal.pattern.test(html)) {
+          score += signal.weight;
+          matchedSignals.push(signal.label);
+        }
+      }
+    }
+
+    // 2. URL Structure Analysis
+    if (profile.signals.urlPatterns) {
+      for (const pattern of profile.signals.urlPatterns) {
+        if (pattern.test(url)) {
+          score += 3;
+          matchedSignals.push(`URL contains ${pattern}`);
+        }
+      }
+    }
+
+    // 3. Technology Detection
+    if (profile.signals.techPatterns && technologies.scripts) {
+      for (const script of technologies.scripts) {
+        for (const pattern of profile.signals.techPatterns) {
+          if (pattern.test(script.name || script.source || '')) {
+            score += 4;
+            matchedSignals.push(`Tech: ${script.name || pattern}`);
+          }
+        }
+      }
+    }
+
+    // 4. Payment Gateway Detection (e-commerce indicator)
+    if (type === 'ecommerce' && technologies.payments && technologies.payments.length > 0) {
+      score += 5 * technologies.payments.length;
+      matchedSignals.push(`Payments: ${technologies.payments.map(p => p.name).join(', ')}`);
+    }
+
+    // 5. Domain TLD Analysis
+    const tldIndicators = {
+      'ecommerce': ['.shop', '.store'],
+      'finance': ['.finance', '.money'],
+      'education': ['.edu', '.academy']
+    };
+
+    if (tldIndicators[type]?.some(t => hostname.includes(t))) {
+      score += 2;
+      matchedSignals.push(`Domain suggests ${type}`);
+    }
+
+    scores[type] = score;
+    evidence[type] = matchedSignals;
+  }
+
+  // Sort and find winner
+  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  const topType = sorted[0];
+  const secondType = sorted[1];
+
+  // Calculate confidence
+  let confidence;
+  if (topType[1] === 0) {
+    confidence = 15; // Unknown
+  } else if (!secondType || secondType[1] === 0) {
+    confidence = 90; // Clear winner
+  } else {
+    confidence = Math.min(95, Math.round((topType[1] / (topType[1] + secondType[1])) * 100));
+  }
+
+  return {
+    type: topType[0],
+    name: BUSINESS_PROFILES[topType[0]]?.name || 'Unknown',
+    icon: BUSINESS_PROFILES[topType[0]]?.icon || '??',
+    score: topType[1],
+    confidence,
+    evidence: evidence[topType[0]],
+    alternatives: sorted
+      .filter(([_, s]) => s > 3 && s < topType[1])
+      .slice(0, 3)
+      .map(([t]) => ({
+        type: t,
+        name: BUSINESS_PROFILES[t]?.name,
+        score: scores[t]
+      })),
+    profile: BUSINESS_PROFILES[topType[0]]
+  };
+}
+
+/**
+ * Check which required pages exist
+ */
+function checkRequiredPages(html, url, businessProfile) {
+  const links = [...html.matchAll(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
+    .map(m => ({ url: m[1], text: m[2].replace(/<[^>]+/g, '').toLowerCase() }));
+
+  const found = [];
+  const missing = [];
+
+  if (!businessProfile.requiredPages) return { found, missing, totalRequired: 0, totalFound: 0 };
+
+  for (const page of businessProfile.requiredPages) {
+    // Build smart patterns for each page type
+    const patterns = {
+      'privacy-policy': /privacy|data.protection|data.policy/i,
+      'terms-of-service': /terms|tos|conditions|terms.of.use/i,
+      'refund-policy': /refund|return|money.back|cancellation.policy/i,
+      'cancellation-policy': /cancel|cancellation/i,
+      'shipping-delivery': /shipping|delivery|fulfillment/i,
+      'cookie-policy': /cookie|use.of.cookie/i,
+      'sla': /sla|service.level|uptime.guarantee/i,
+      'acceptable-use': /acceptable.use|aup|usage.policy/i,
+      'dpa': /dpa|data.processing|processor/i,
+      'gdpr-compliance': /gdpr|eu.privacy|data.protection.officer/i,
+      'risk-disclosure': /risk|disclosure|investment.risk/i,
+      'grievance-redressal': /grievance|complaint|ombudsman|redressal/i,
+      'licenses': /license|registration|rbi|sebi|irdai/i,
+      'security-practices': /security|information.security|iso|soc/i,
+      'medical-disclaimer': /medical.disclaimer|health.disclaimer|not.a.doctor/i,
+      'doctor-credentials': /doctor|credential|qualification|registration/i,
+      'patient-rights': /patient.rights|rights.responsibilities/i,
+      'data-security': /data.security|encryption|secure/i,
+      'emergency-disclaimer': /emergency|not.emergency|call.911/i,
+      'intellectual-property', 'ip', 'intellectual.property',
+      'accreditation': | accreditation | certified | recognized | approved / i,
+      'accessibility': | accessibility | wcag | a11y | screen.reader / i,
+      'service-terms': /service.terms|engagement.terms|agreement/i,
+      'data-processing': /data.processing|client.data|handling/i
+    };
+
+    const pattern = patterns[page.type] || new RegExp(page.type.replace('-', '.?'));
+    const isFound = links.some(l => pattern.test(l.url) || pattern.test(l.text));
+
+    if (isFound) {
+      found.push({
+        ...page,
+        status: 'found',
+        detectedAt: new Date().toISOString()
+      });
+    } else {
+      missing.push({
+        ...page,
+        status: 'missing',
+        detectedAt: null,
+        daysOverdue: 'N/A',
+        estimatedCostOfNonCompliance: estimatePenalty(page, businessProfile.type),
+        recommendedTemplate: page.templateAvailable ? `${page.type}-template` : 'custom-required'
+      });
+    }
+  }
+
+  return {
+    found,
+    missing,
+    totalRequired: businessProfile.requiredPages.length,
+    totalFound: found.length,
+    compliancePercentage: Math.round((found.length / businessProfile.requiredPages.length) * 100)
+  };
+}
+
+/**
+ * Estimate penalty for non-compliance
+ */
+function estimatePenalty(page, businessType) {
+  const penalties = {
+    critical: { min: 50000, max: 5000000, unit: 'INR', additional: 'Possible imprisonment' },
+    high: { min: 10000, max: 500000, unit: 'INR', additional: '' },
+    medium: { min: 5000, max: 100000, unit: 'INR', additional: '' },
+    low: { min: 1000, max: 25000, unit: 'INR', additional: '' }
+  };
+
+  const tier = penalties[page.priority] || penalties.medium;
+
+  return {
+    range: `?${tier.min.toLocaleString()} - ?${tier.max.toLocaleString()}`,
+    additionalInfo: tier.additional,
+    worstCase: `?${tier.max.toLocaleString()}${tier.additional ? ' + ' + tier.additional : ''}`
+  };
+}
+
+/**
+ * Generate actionable recommendations
+ */
+function generateRecommendations(businessDetection, pageCheck, technologies) {
+  const recommendations = [];
+
+  // Critical missing pages first
+  for (const page of pageCheck.missing.filter(p => p.priority === 'critical')) {
+    recommendations.push({
+      id: `rec-${page.type}`,
+      priority: 'immediate',
+      category: 'legal-compliance',
+      title: `Create ${page.label}`,
+      description: page.reason,
+      impact: {
+        riskReduction: 25,
+        trustImprovement: 20,
+        penaltyAvoidance: page.estimatedCostOfNonCompliance?.worstCase
+      },
+      effort: page.effort,
+      estimatedTime: page.effort === 'small' ? '2-4 hours' : page.effort === 'medium' ? '1-2 days' : '1-2 weeks',
+      hasTemplate: page.templateAvailable,
+      urgency: page.urgency,
+      regulation: businessDetection.profile.regulations?.find(r => r.applicability === 'mandatory')?.name || 'General'
+    });
+  }
+
+  // High priority items
+  for (const page of pageCheck.missing.filter(p => p.priority === 'high')) {
+    recommendations.push({
+      id: `rec-${page.type}`,
+      priority: 'urgent',
+      category: 'operational',
+      title: `Add ${page.label}`,
+      description: page.reason,
+      impact: {
+        riskReduction: 15,
+        trustImprovement: 15,
+        penaltyAvoidance: page.estimatedCostOfNonCompliance?.range
+      },
+      effort: page.effort,
+      estimatedTime: page.effort === 'small' ? '2-4 hours' : page.effort === 'medium' ? '1 day' : '3-5 days',
+      hasTemplate: page.templateAvailable,
+      urgency: page.urgency
+    });
+  }
+
+  // Technology-specific recommendations
+  if (technologies.cookies && technologies.cookies.length > 5) {
+    recommendations.push({
+      id: 'rec-cookie-consent',
+      priority: 'urgent',
+      category: 'technology',
+      title: 'Implement Cookie Consent Banner',
+      description: `Detected ${technologies.cookies.length} cookie types including tracking`,
+      impact: {
+        riskReduction: 20,
+        trustImprovement: 25,
+        penaltyAvoidance: 'IT Rules 2021 compliance'
+      },
+      effort: 'medium',
+      estimatedTime: '1-2 days',
+      hasTemplate: true,
+      urgency: 'urgent'
+    });
+  }
+
+  if (technologies.payments && technologies.payments.length > 0) {
+    recommendations.push({
+      id: 'rec-payment-security',
+      priority: 'recommended',
+      category: 'technology',
+      title: 'Display Payment Security Badges',
+      description: `Uses ${technologies.payments.map(p => p.name).join(', ')}. Show security certifications.`,
+      impact: {
+        riskReduction: 10,
+        trustImprovement: 30,
+        conversionImpact: '+5-10% checkout completion'
+      },
+      effort: 'small',
+      estimatedTime: '1-2 hours',
+      hasTemplate: false,
+      urgency: 'recommended'
+    });
+  }
+
+  // Sort by priority
+  const priorityOrder = { immediate: 0, urgent: 1, recommended: 2, optional: 3 };
+  recommendations.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+
+  return recommendations;
+}
+
+// ---------------------------------------------------------------
+// MAIN SCAN FUNCTION (ULTRA SMART VERSION)
+// ---------------------------------------------------------------
+
+async function scanWebsiteUltraSmart(url) {
+  if (!isValidURL(url)) throw new Error('Invalid URL');
+
+  const startTime = Date.now();
+
+  try {
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': CONFIG.USER_AGENT }
+    });
+    const html = await resp.text();
+
+    // Detect basic technologies
+    const cookies = [], scripts = [], payments = [];
+
+    if (html.includes('_ga')) cookies.push({ name: '_ga', vendor: 'Google Analytics', category: 'analytics' });
+    if (html.includes('_fbp')) cookies.push({ name: '_fbp', vendor: 'Facebook Pixel', category: 'advertising' });
+    if (html.includes('_gcl_au')) cookies.push({ name: '_gcl_au', vendor: 'Google Ads', category: 'advertising' });
+
+    const scriptMatches = html.match(/<script[^>]*src=["']([^"']+)["'][^>]*>/gi) || [];
+    for (const src of scriptMatches) {
+      if (/google-analytics/.test(src)) scripts.push({ name: 'Google Analytics', category: 'analytics' });
+      if (/facebook.*fbevents/.test(src)) scripts.push({ name: 'Facebook Pixel', category: 'advertising' });
+      if (/googleadservices/.test(src)) scripts.push({ name: 'Google Ads Conversion', category: 'advertising' });
+      if (/hotjar/.test(src)) scripts.push({ name: 'Hotjar', category: 'analytics' });
+      if (/checkout\.stripe/.test(src)) payments.push({ name: 'Stripe Checkout', category: 'payment' });
+      if (/razorpay/.test(src)) payments.push({ name: 'Razorpay', category: 'payment' });
+      if (/paypal/.test(src)) payments.push({ name: 'PayPal', category: 'payment' });
+      if (/woocommerce/.test(src)) payments.push({ name: 'WooCommerce', category: 'ecommerce-platform' });
+      if (/shopify/.test(src)) payments.push({ name: 'Shopify', category: 'ecommerce-platform' });
+    }
+
+    const technologies = { cookies, scripts, payments };
+
+    // ------------------------------------------
+    // ?? ULTRA SMART BUSINESS DETECTION
+    // ------------------------------------------
+    const businessDetection = detectBusinessTypeAdvanced(html, url, technologies);
+
+    // ------------------------------------------
+    // ?? CONTEXT-AWARE PAGE CHECKING
+    // ------------------------------------------
+    const pageCheck = checkRequiredPages(html, url, businessDetection.profile);
+
+    // ------------------------------------------
+    // ?? SMART RECOMMENDATIONS
+    // ------------------------------------------
+    const recommendations = generateRecommendations(businessDetection, pageCheck, technologies);
+
+    // ------------------------------------------
+    // ?? COMPLIANCE SCORE (WEIGHTED)
+    // ------------------------------------------
+    let weightedScore = 0;
+    let maxPossibleScore = 0;
+
+    for (const page of businessDetection.profile.requiredPages || []) {
+      const weight = page.priority === 'critical' ? 3 : page.priority === 'high' ? 2 : 1;
+      maxPossibleScore += weight;
+
+      const isFound = pageCheck.found.some(f => f.type === page.type);
+      if (isFound) weightedScore += weight;
+    }
+
+    const finalScore = maxPossibleScore > 0 ? Math.round((weightedScore / maxPossibleScore) * 100) : null;
+
+    // Determine overall status
+    let status, statusColor, statusMessage;
+    if (!finalScore || finalScore < 30) {
+      status = 'critical';
+      statusColor = 'red';
+      statusMessage = '?? Major compliance gaps - Immediate action required';
+    } else if (finalScore < 60) {
+      status = 'warning';
+      statusColor = 'orange';
+      statusMessage = '? Several important pages missing - Urgent attention needed';
+    } else if (finalScore < 85) {
+      status = 'good';
+      statusColor = 'yellow';
+      statusMessage = '? Good foundation - Minor improvements possible';
+    } else {
+      status = 'excellent';
+      statusColor = 'green';
+      statusMessage = '?? Excellent compliance posture!';
+    }
+
+    // Build final response
+    return {
+      version: '3.0.0',
+      scannedAt: new Date().toISOString(),
+      url,
+      statusCode: resp.status,
+      scanDurationMs: Date.now() - startTime,
+
+      // ?? BUSINESS INTELLIGENCE
+      businessIntelligence: {
+        detectedType: businessDetection.type,
+        typeName: businessDetection.name,
+        typeIcon: businessDetection.icon,
+        confidence: businessDetection.confidence,
+        confidenceLevel: businessDetection.confidence > 80 ? 'High' : businessDetection.confidence > 50 ? 'Medium' : 'Low',
+        evidence: businessDetection.evidence,
+        alternatives: businessDetection.alternatives,
+
+        // Applicable regulations for THIS business
+        regulations: businessDetection.profile.regulations || []
+      },
+
+      // Technologies found
+      technologies: {
+        summary: {
+          totalCookies: cookies.length,
+          totalScripts: scripts.length,
+          paymentGateways: payments.length,
+          hasAnalytics: scripts.some(s => s.category === 'analytics'),
+          hasAdvertising: scripts.some(s => s.category === 'advertising'),
+          hasChatWidget: scripts.some(s => s.category === 'chat'),
+          dataCollectionLevel: cookies.length > 5 ? 'extensive' : cookies.length > 2 ? 'moderate' : 'minimal'
+        },
+        details: { cookies, scripts, payments }
+      },
+
+      // ?? CONTEXT-AWARE LEGAL ANALYSIS
+      legalAnalysis: {
+        businessType: businessDetection.type,
+        businessTypeName: businessDetection.name,
+
+        // Only RELEVANT required pages
+        requiredPages: (businessDetection.profile.requiredPages || []).map(p => ({
+          type: p.type,
+          label: p.label,
+          whyNeeded: p.reason,
+          priority: p.priority,
+          riskIfMissing: p.riskIfMissing,
+          effort: p.effort,
+          hasTemplate: p.templateAvailable
+        })),
+
+        // Found pages
+        foundPages: pageCheck.found,
+
+        // Missing pages (with penalties!)
+        missingPages: pageCheck.missing,
+
+        // Optional but nice-to-have
+        optionalPages: businessDetection.profile.optionalPages || [],
+
+        // Smart scoring
+        scores: {
+          compliancePercentage: finalScore,
+          weightedScore: finalScore,
+          totalRelevantRequired: pageCheck.totalRequired,
+          totalFound: pageCheck.totalFound,
+          status,
+          statusColor,
+          statusMessage
+        },
+
+        // Summary message
+        summary: {
+          headline: pageCheck.missing.filter(p => p.priority === 'critical').length > 0
+            ? `?? ${pageCheck.missing.filter(p => p.priority === 'critical').length} CRITICAL pages missing`
+            : pageCheck.missing.length > 0
+              ? `?? ${pageCheck.missing.length} important pages need attention`
+              : '? All critical pages present!',
+          detail: `${pageCheck.totalFound}/${pageCheck.totalRequired} relevant pages found (${finalScore}% compliant)`
+        }
+      },
+
+      // ?? ACTIONABLE RECOMMENDATIONS
+      recommendations: {
+        total: recommendations.length,
+        immediate: recommendations.filter(r => r.priority === 'immediate').length,
+        urgent: recommendations.filter(r => r.priority === 'urgent').length,
+        items: recommendations.slice(0, 10), // Top 10
+        estimatedTotalEffort: recommendations.reduce((acc, r) => acc + (r.effort === 'small' ? 4 : r.effort === 'medium' ? 12 : 40), 0) // Hours
+      },
+
+      // Quick facts
+      quickFacts: {
+        businessType: `${businessDetection.icon} ${businessDetection.name}`,
+        confidence: `${businessDetection.confidence}% confident`,
+        complianceStatus: `${finalScore ?? 0}%`,
+        criticalIssues: pageCheck.missing.filter(p => p.priority === 'critical').length,
+        hasPaymentProcessing: payments.length > 0,
+        collectsPersonalData: cookies.length > 0 || /type=["']email["']/i.test(html),
+        needsImmediateAction: pageCheck.missing.some(p => p.priority === 'critical')
+      }
+    };
+
+  } catch (err) {
+    throw new Error(`Scan failed: ${err.message}`);
+  }
+}
+
+// ---------------------------------------------------------------
+// ROUTES
+// ---------------------------------------------------------------
+
+app.get('/health', (req, res) => res.json({
+  status: 'OK',
+  version: '3.0.0',
+  engine: 'Ultra-Smart Business Intelligence v3.0',
+  features: [
+    'Multi-signal business detection',
+    'Context-aware legal requirements',
+    'Indian regulation mapping',
+    'Penalty estimation',
+    'Priority-based recommendations'
+  ]
+}));
+
+app.post('/api/scan', auth, async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'URL required' });
+
+  try {
+    console.log(`?? Ultra-smart scanning: ${url}`);
+    const result = await scanWebsiteUltraSmart(url);
+    console.log(`? Scan complete: ${result.businessIntelligence.typeName} (${result.businessIntelligence.confidence}% confidence)`);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('? Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`
++--------------------------------------------------+
+�                                                  �
+�   ?? LegalGen V3 ULTRA-SMART Scanner           �
+�   -----------------------------                   �
+�   Version: 3.0.0                                 �
+�   Port: ${PORT}                                      �
+�   Engine: AI-Powered Business Intelligence       �
+�                                                  �
+�   Features:                                       �
+�   � Multi-signal business detection               �
+�   � Context-aware legal requirements              �
+�   � Indian regulation mapping                    �
+�   � Penalty estimation                           �
+�   � Priority-based recommendations               �
+�                                                  �
++--------------------------------------------------+
+  `);
+});
